@@ -1,0 +1,34 @@
+################################################################################
+# 
+# Note:
+#     Windows ビルド・テスト用サービスを起動する際は、
+#     Docker Desktop を Windwos コンテナモードにすること
+#     ☆変更方法☆
+#         Windows の通知領域にある Docker Desktop icon の context menu から、
+#         "Switch to Windows containers..." を選択
+# 
+# 起動コマンド例:
+#     docker compose run dev_env
+# 
+# cf. https://blog.jp.square-enix.com/iteng-blog/posts/00040-windows-container-with-docker/
+# 
+################################################################################
+
+version: "3.8"
+services:
+  dev_env:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+      # args:
+      #   - platform=x64
+      #   - build_type=Debug
+      #   - vs_version=VS14
+    volumes:
+      - type: bind
+        source: ./src
+        target: c://src
+        # read_only: true
+    working_dir: c://src
+    tty: true
+    command: ["cmd.exe"]
