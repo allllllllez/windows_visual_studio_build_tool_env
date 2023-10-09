@@ -36,7 +36,7 @@ RUN %INSTALL_CMD_PATH% %VS_BUILDTOOLS_PATH% --quiet --wait --norestart --nocache
     --installChannelUri %VISUALSTUDIO_CHANNEL_URL_PATH% `
     --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
 
-FROM recommended as additional-tools
+FROM recommended as additional-buildtools
 
 # Windows 8.1 SDK # なぜか10じゃzlibのコンパイルが通らないの： The Windows SDK version 8.1 was not found. Install the required version of Windows SDK or change the SDK version in the project property pages or by right-clicking the solution and selecting 
 RUN %INSTALL_CMD_PATH% %VS_BUILDTOOLS_PATH% --quiet --wait --norestart --nocache `
@@ -45,6 +45,8 @@ RUN %INSTALL_CMD_PATH% %VS_BUILDTOOLS_PATH% --quiet --wait --norestart --nocache
     --installChannelUri %VISUALSTUDIO_CHANNEL_URL_PATH% `
     --add Microsoft.VisualStudio.Component.Windows81SDK `
     --add Microsoft.Component.VC.Runtime.UCRTSDK
+
+FROM additional-buildtools as additional-othertools
 
 # git for Windows(latest)
 ARG GIT_INSTALLER_NAME=install_git_for_windows.ps1
@@ -67,14 +69,12 @@ RUN powershell %TEMP_CMAKE_INSTALLER_PATH% %CMAKE_INSTALL_PATH%
 
 # Install Python
 ARG PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.11.5/python-3.11.5-amd64.exe `
-    PYTHON_INSTALLER_PATH=python-amd64.exe
+    PYTHON_INSTALLER_NAME=python-amd64.exe
 ENV PYTHON_INSTALL_PATH="C:\Pyhton" `
-    TEMP_PYTHON_INSTALLER_PATH="${TEMP_PATH}\${PYTHON_INSTALLER_PATH}"
+    TEMP_PYTHON_INSTALLER_PATH="${TEMP_PATH}\${PYTHON_INSTALLER_NAME}"
 # cf. https://docs.python.org/ja/3.11/using/windows.html#installing-without-ui
-RUN powershell Invoke-WebRequest `
-        -Uri https://www.python.org/ftp/python/3.11.5/python-3.11.5-amd64.exe `
-        -OutFile %TEMP_PYTHON_INSTALLER_PATH%; `
-    %TEMP_PYTHON_INSTALLER_PATH% /quiet `
+ADD ${PYTHON_INSTALLER_URL} ${TEMP_PYTHON_INSTALLER_PATH}
+RUN %TEMP_PYTHON_INSTALLER_PATH% /quiet `
         TargetDir=%PYTHON_INSTALL_PATH% `
         Include_pip=1 `
         InstallAllUsers=0 `
@@ -82,28 +82,27 @@ RUN powershell Invoke-WebRequest `
         Include_test=0 `
         SimpleInstall=1
 
+# perl(Strawberry perl)
+# TODO：PERL_INSTALL_PATH 指定できないかなあ？オプションあると思うんだけど
+ENV PERL_INSTALLER_URL=https://strawberryperl.com/download/5.32.1.1/strawberry-perl-5.32.1.1-64bit.msi 
+ARG PERL_INSTALLER_NAME=strawberry-perl-64bit.msi
+ENV TEMP_PERL_INSTALLER_PATH="${TEMP_PATH}\${PERL_INSTALLER_NAME}" `
+    PERL_INSTALL_PATH="c:\Strawberry\perl"
+ADD ${CURL_INSTALLER_URL} ${TEMP_PERL_INSTALLER_PATH}
+RUN msiexec.exe /i %PERL_INSTALLER_URL% /qn
+
+# 7z
+# powershell Invoke-WebRequest -Uri https://www.7-zip.org/a/7z2301-x64.exe -OutFile 7z2301-x64.exe
+# 7z2301-x64.exe /S /D="C:\7-ZIP"
 
 # Add path
-RUN setx /M PATH "%PATH%;%CMAKE_INSTALL_PATH%\bin;%AWSCLIV2_INSTALL_PATH%;%GIT_INSTALL_PATH%;%PYTHON_INSTALL_PATH%;%PYTHON_INSTALL_PATH%\Scripts"
+RUN setx /M PATH "%PATH%;%CMAKE_INSTALL_PATH%\bin;%AWSCLIV2_INSTALL_PATH%;%GIT_INSTALL_PATH%;%PYTHON_INSTALL_PATH%;%PYTHON_INSTALL_PATH%\Scripts;%CURL_INSTALL_PATH%\bin;%PERL_INSTALL_PATH%\bin"
+RUN set VSCMD_DEBUG=3
 
-# FROM recommended AS atl-mfc-cli
+# Visual Studio Build Toolsの環境変数を設定してからコマンドを実行するようにしておく
+# デフォルトではPowerShellを使用する
+ENTRYPOINT ["C:\\BuildTools\\Common7\\Tools\\VsDevCmd.bat", "&&", "powershell.exe", "-NoLogo", "-ExecutionPolicy", "Bypass"]
 
-# # MFC, ATL, C++/CLI
-# RUN %INSTALL_CMD_PATH% %VS_BUILDTOOLS_PATH% --quiet --wait --norestart --nocache `
-#     --installPath C:\BuildTools `
-#     --channelUri %VISUALSTUDIO_CHANNEL_URL_PATH% `
-#     --installChannelUri %VISUALSTUDIO_CHANNEL_URL_PATH% `
-#     --add Microsoft.VisualStudio.Component.VC.ATL `
-#     --add Microsoft.VisualStudio.Component.VC.ATLMFC `
-#     --add Microsoft.VisualStudio.Component.VC.CLI.Support
-
-# デフォルトでPowerShellを使用する
-CMD ["powershell.exe", "-NoLogo", "-ExecutionPolicy", "Bypass"]
-
-# Visual Studio Build Toolsの環境変数を設定してからコマンドを実行するようにする
-# これ悪さしてない？？
-# ENTRYPOINT ["C:\BuildTools\Common7\Tools\VsDevCmd.bat", "-arch=amd64", "-host_arch=amd64"]
-# "C:\BuildTools\Common7\Tools\VsDevCmd.bat -arch=amd64 -host_arch=amd64"
 
 # References
 # - https://qiita.com/tetsurom/items/d2aac2e56f024b3178fb

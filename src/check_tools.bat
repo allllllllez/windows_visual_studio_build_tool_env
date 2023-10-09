@@ -10,3 +10,4 @@ cmake --version
 aws --version
 python --version
 pip --version
+perl --version
